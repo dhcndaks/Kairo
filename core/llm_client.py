@@ -1,0 +1,217 @@
+# [KAIRO] LLM Client - LLM API Client
+import requests
+from core.config import (
+    LLM_API_KEY,
+    LLM_BASE_URL,
+    LLM_MODEL,
+    LLM_TIMEOUT,
+    LLM_MAX_RETRIES,
+    LLM_RETRY_DELAY,
+    LLM_MAX_TOKENS,
+    LLM_TEMPERATURE,
+)
+
+
+class LLMClient:
+
+    def __init__(self):
+        self.api_key = LLM_API_KEY
+        self.base_url = LLM_BASE_URL
+        self.model = LLM_MODEL
+
+    def chat(
+        self,
+        messages: list[dict],
+        kb_content: str = "",
+        temperature: float = None,
+        max_tokens: int = None,
+    ) -> str:
+        if not self.api_key:
+            return "⚠️ API 키가 설정되지 않았습니다. .env.toml 파일을 확인해주세요."
+
+        system_prompt = self._build_system_prompt(kb_content)
+        full_messages = [{"role": "system", "content": system_prompt}] + messages
+
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+
+        tokens = max_tokens or LLM_MAX_TOKENS
+
+        for attempt in range(LLM_MAX_RETRIES + 1):
+            try:
+                payload = {
+                    "model": self.model,
+                    "messages": full_messages,
+                    "temperature": temperature or LLM_TEMPERATURE,
+                    "max_tokens": tokens,
+                }
+                response = requests.post(
+                    f"{self.base_url}/chat/completions",
+                    json=payload,
+                    headers=headers,
+                    timeout=LLM_TIMEOUT,
+                )
+                response.raise_for_status()
+                data = response.json()
+                message = data["choices"][0]["message"]
+                content = message.get("content", "")
+                if content:
+                    return content
+                if attempt < LLM_MAX_RETRIES:
+                    tokens = tokens * 2
+                    continue
+                return "💭 응답을 생성하는 중 시간이 부족했습니다. 다시 시도해주세요."
+
+            except requests.exceptions.Timeout:
+                if attempt < LLM_MAX_RETRIES:
+                    import time
+                    time.sleep(LLM_RETRY_DELAY)
+                    continue
+                return "⏰ 응답 시간이 초과되었습니다. 잠시 후 다시 시도해주세요."
+
+            except requests.exceptions.ConnectionError:
+                return "🔌 서비스에 연결할 수 없습니다. 네트워크를 확인해주세요."
+
+            except requests.exceptions.HTTPError as e:
+                if response.status_code == 401:
+                    return "🔑 API 키가 유효하지 않습니다. .env 파일을 확인해주세요."
+                if response.status_code == 429:
+                    return "⏳ 요청이 너무 많습니다. 잠시 후 다시 시도해주세요."
+                return f"❌ API 오류: {e}"
+
+            except (KeyError, IndexError):
+                return "❌ API 응답 형식 오류가 발생했습니다."
+
+            except Exception as e:
+                return f"❌ 예상치 못한 오류: {e}"
+
+        return "❌ 최대 재시도 횟수를 초과했습니다."
+
+    # [KAIRO] streaming chat
+    def chat_stream(self, messages: list[dict], kb_content: str = "", temperature: float = None, max_tokens: int = None):
+        if not self.api_key:
+            yield "⚠️ API 키가 설정되지 않았습니다. .env.toml 파일을 확인해주세요."
+            return
+
+        system_prompt = self._build_system_prompt(kb_content)
+        full_messages = [{"role": "system", "content": system_prompt}] + messages
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+
+        payload = {
+            "model": self.model,
+            "messages": full_messages,
+            "temperature": temperature or LLM_TEMPERATURE,
+            "max_tokens": max_tokens or LLM_MAX_TOKENS,
+            "stream": True,
+        }
+
+        try:
+            response = requests.post(
+                f"{self.base_url}/chat/completions",
+                json=payload,
+                headers=headers,
+                timeout=LLM_TIMEOUT,
+                stream=True,
+            )
+            response.raise_for_status()
+            for line in response.iter_lines():
+                if not line:
+                    continue
+                decoded = line.decode("utf-8")
+                if not decoded.startswith("data: "):
+                    continue
+                data = decoded[6:]
+                if data.strip() == "[DONE]":
+                    break
+                import json as _json
+                try:
+                    chunk = _json.loads(data)
+                    delta = chunk["choices"][0].get("delta", {})
+                    content = delta.get("content", "")
+                    if content:
+                        yield content
+                except (_json.JSONDecodeError, KeyError, IndexError):
+                    continue
+        except requests.exceptions.Timeout:
+            yield "⏰ 응답 시간이 초과되었습니다."
+        except requests.exceptions.ConnectionError:
+            yield "🔌 서비스에 연결할 수 없습니다."
+        except Exception as e:
+            yield f"❌ 스트리밍 오류: {e}"
+
+    def _build_system_prompt(self, kb_content: str) -> str:
+        prompt = (
+            "당신은 Kairo(카이로)입니다 — 사용자와 함께 성장하는 개인 지식 에이전트입니다.\n"
+            "아래 KB.md 내용을 바탕으로 사용자를 도와주세요.\n\n"
+            "지침:\n"
+            "1. KB.md의 사용자 프로필을 기반으로 개인화된 답변을 제공하세요.\n"
+            "2. KB.md에 정의된 스킬이 질문과 관련 있으면 활용하세요.\n"
+            "3. 새로운 정보를 얻었다면 KB.md에 추가할 내용을 제안하세요.\n"
+            "4. 지식 간 연결을 발견하면 알려주세요.\n"
+            "5. 한국어로 친근하게 대화하세요.\n\n"
+            "KB.md 업데이트 규칙:\n"
+            "- 사용자가 이름, 전공, 취향 등 개인정보를 알려주면 User Profile 섹션을 업데이트하세요.\n"
+            "- 새로운 프로젝트 정보가 나오면 Projects 섹션에 추가하세요.\n"
+            "- 업데이트가 필요할 경우, 응답 맨 끝에 다음 형식으로 블록을 추가하세요:\n"
+            "```kb-update\n"
+            "## 👤 User Profile\n"
+            "- name: 곰탕\n"
+            "- major: Computer Science\n"
+            "```\n"
+            "- 여러 섹션을 업데이트하려면 ```kb-update 블록을 여러 개 사용하세요.\n"
+            "- 블록 안에는 해당 섹션의 헤더(`## `)와 전체 내용을 포함하세요.\n"
+            "\n지식 그래프 엣지 규칙:\n"
+            "- 대화 중 두 개념의 관계를 발견하면 응답 맨 끝에 다음 형식으로 추가하세요:\n"
+            "```kb-graph\n"
+            "source: 개념A\ntarget: 개념B\ntype: 관계유형\n```\n"
+            "- type 예시: related_to, depends_on, part_of, leads_to\n"
+            "\n동적 크론 제안 규칙:\n"
+            "- 사용자가 반복적인 작업, 알림, 스케줄을 언급하면 크론 잡을 제안하세요.\n"
+            "- 응답 맨 끝에 다음 형식으로 추가하세요:\n"
+            "```kb-cron\n"
+            "name: 작업이름\ncron: */30 * * * *\naction: 실행할 작업 설명\ndescription: 왜 이 크론이 유용한지\n```\n"
+            "- cron 표현식은 5필드(분 시 일 월 요일) 형식을 사용하세요.\n"
+            "\n터미널 도구 규칙:\n"
+            "- 시스템 정보, 파일 목록, 날짜 등이 필요할 때 터미널 명령어를 실행할 수 있습니다.\n"
+            "- 응답에 다음 형식으로 명령어를 포함하세요:\n"
+            "---TOOL---\n"
+            "command: ls pages/\n"
+            "---TOOL---\n"
+            "- 사용 가능한 명령어: date, ls, cat, echo, git status, git diff, git log, pwd, wc, head, tail, whoami, uname, df\n"
+            "- 위험한 명령어(rm, sudo 등)는 실행할 수 없습니다.\n"
+            "- 한 응답에 여러 명령어를 실행할 수 있습니다.\n"
+            "\n동적 폼 규칙:\n"
+            "- 사용자로부터 체계적인 입력을 받아야 할 때 폼을 생성하세요.\n"
+            "- 응답에 다음 형식으로 폼을 포함하세요:\n"
+            "---FORM---\n"
+            "title: 폼 제목\n"
+            "field: 필드이름 | text | placeholder 텍스트\n"
+            "field: 나이 | number | 나이를 입력하세요\n"
+            "field: 취미 | textarea | 취미를 입력하세요\n"
+            "field: 언어 | select | 한국어,영어,일본어\n"
+            "---FORM_END---\n"
+            "- field 형식: 이름 | 타입 | 힌트\n"
+            "- 타입: text, number, textarea, select (select은 쉼표로 옵션 구분)\n"
+            "\n동적 위젯 규칙:\n"
+            "- 표가 필요할 때:\n"
+            "---TABLE---\n"
+            "이름|나이|도시\n"
+            "홍길동|25|서울\n"
+            "김영희|30|부산\n"
+            "---TABLE_END---\n"
+            "- 차트가 필요할 때 (type: bar, line, pie):\n"
+            "---CHART---\n"
+            "type: bar\ntitle: 월별 매출\n1월|100\n2월|150\n3월|200\n---CHART_END---\n"
+            "- 버튼이 필요할 때:\n"
+            "---BUTTON---\nlabel: 실행하기\naction: 스크립트 실행\n---BUTTON---\n"
+        )
+
+        if kb_content:
+            prompt += f"\n---\n## KB.md (Knowledge Base)\n{kb_content}\n---\n"
+
+        return prompt
