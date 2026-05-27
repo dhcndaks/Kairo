@@ -213,3 +213,44 @@
 - Kiwi 형태소 분석기: https://github.com/bab2min/kiwipiepy
 - RapidFuzz 문서: https://rapidfuzz.github.io/RapidFuzz/
 - Kairo 저장소: https://github.com/dhcndaks/Kairo
+
+---
+
+## 🏆 경쟁/유사 오픈소스 프로젝트 비교 (2026년 5월 기준)
+
+### Karpathy LLM Wiki 구현체들
+
+Karpathy의 LLM Wiki 아이디어를 실제로 구현한 오픈소스 프로젝트들이 2026년 4월 이후 폭발적으로 증가했습니다.
+
+| 프로젝트 | ⭐ | 언어 | 특징 | Kairo와의 차이점 |
+|:---------|:-:|:----:|:------|:----------------|
+| **yopedia** | 57 | TypeScript | 풀스택 Next.js, 1,242개 테스트, 6개 AI 에이전트 | Kairo는 Streamlit 1개 파일 |
+| **toolboxmd/karpathy-wiki** | 66 | Shell | Claude Code 스킬 플러그인 | CLI 전용, UI 없음 |
+| **nanzhipro/bootstrap** | 31 | Markdown | 설치형 스킬 + 예제 Wiki | Kairo는 앱, 이건 스킬 |
+| **Benboerba620/wiki** | 31 | Python | 개인 위키 템플릿 (Claude Code) | Kairo는 Streamlit 웹 UI |
+| **harrylabsj/plugin** | 1 | TypeScript | MCP 플러그인 | CLI/MCP 전용 |
+
+### 유사 AI Agent 프레임워크
+
+| 프레임워크 | ⭐ | 라이선스 | 접근법 | Kairo 차별점 |
+|:----------|:-:|:--------:|:------|:------------|
+| **AutoGPT** | 170K+ | MIT | 자율 단일 에이전트, 토큰 낭비 심함 | Kairo는 KB.md 단일 파일, 가벼움 |
+| **CrewAI** | 50K+ | MIT | 다중 에이전트 협업, 팀 구조 | Kairo는 단일 에이전트 + KB |
+| **LangChain** | 100K+ | MIT | 체인 기반, 복잡함 | Kairo는 설정 0줄, 바로 실행 |
+| **Kairo (우리)** | — | MIT | **KB.md 단일 파일, Streamlit UI** | **가장 단순한 구조** |
+
+### Streamlit 그래프 시각화 도구들
+
+| 도구 | ⭐ | 라이선스 | 특징 |
+|:----|:-:|:--------:|:------|
+| **streamlit-d3-network** | — | MIT | D3.js 기반, 7가지 노드 모양, 검색/필터/다크모드 |
+| **yFiles for Streamlit** | 17 | 상업용 | 고급 레이아웃, 히트맵, 지리공간 |
+| **cognisgraph** | — | — | Knowledge Graph + XAI 설명 가능 |
+| **RDFOwlVisualizer** | — | — | RDF/OWL + Plotly + networkx |
+| **✅ Kairo (pyvis+stvis)** | — | BSD/MIT | **가장 가벼움, 1줄 코드로 그래프** |
+
+### 발표 활용 포인트
+
+> _"Kairo는 Karpathy의 LLM Wiki 패턴을 따라 단일 파일(KB.md) 아키텍처를 채택했습니다. 유사 프로젝트(yopedia, AutoGPT, CrewAI)와 달리 **가장 단순한 구조**로, Streamlit 하나만 있으면 누구나 실행할 수 있습니다."_
+
+> _"Knowledge Graph 시각화에는 Pyvis(SciPy 2020)와 stvis를 사용했으며, streamlit-d3-network 등 대안 대비 **설정이 가장 간단**하여 발표 데모에 적합합니다."_
