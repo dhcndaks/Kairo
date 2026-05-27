@@ -1,6 +1,9 @@
 # [KAIRO] Knowledge Graph Visualization Page
+# Academic References: SciPy Proceedings 2020 (Pyvis/VisJS),
+#   CM4AI CEUR WS 2025 (KG + LLM Reasoning),
+#   Karpathy LLM Wiki 2026 (Single-file KB architecture)
 import streamlit as st
-from core import KBManager, KnowledgeGraph
+from core import KBManager, KnowledgeGraph, LLMClient
 from pyvis import network as net
 from stvis import pv_static
 import re
@@ -8,9 +11,23 @@ import re
 st.set_page_config(page_title="Knowledge Graph - Kairo", page_icon="🧩", layout="wide")
 st.title("🧩 Knowledge Graph Visualization")
 
+# Academic reference badge (as proposed in Issue #3)
+st.caption(
+    "📚 Powered by [Pyvis/VisJS](https://proceedings.scipy.org) (SciPy 2020) "
+    & "\u0026 [CM4AI KG+LLM](https://ceur-ws.org/Vol-3773/paper2.pdf) (CEUR WS 2025)"
+)
+
 kb = KBManager()
 kb_content = kb.read()
 edges = KnowledgeGraph.parse_edges(kb_content)
+
+# [ACADEMIC] LLM-based graph interpretation (CM4AI paper §3)
+# User can select a node to get LLM-generated natural language interpretation
+selected_node = st.session_state.get("graph_selected_node", None)
+
+# Check if LLM is available for interpretation
+llm = LLMClient()
+llm_ready = bool(llm.api_key)
 
 col1, col2 = st.columns([2, 1])
 
@@ -24,6 +41,35 @@ with col2:
                 st.write(f"유형: {edge.get('type', '일반')}")
     else:
         st.info("Knowledge Graph에 edge가 없습니다.\nKB.md의 Knowledge Graph 섹션에 edge를 추가해주세요.")
+
+    # [ACADEMIC] CM4AI-inspired LLM reasoning panel
+    st.divider()
+    st.subheader("🧠 LLM 그래프 해석")
+    st.caption("CM4AI 논문 기반: Knowledge Graph + LLM Reasoning")
+    
+    if not llm_ready:
+        st.info("⚠️ LLM API 키가 설정되지 않았습니다. \nSettings 페이지에서 API 키를 설정해주세요.")
+    elif selected_node:
+        # Build prompt based on CM4AI paper: node-centric reasoning
+        related_edges = [e for e in edges if e.get('source') == selected_node or e.get('target') == selected_node]
+        
+        if related_edges:
+            prompt = f"""아래 Knowledge Graph에서 '{selected_node}' 노드의 의미와 관계를 한국어로 2~3문장으로 요약해주세요. 마크다운 문법 없이 plain text로.
+            
+노드 관계:
+"""
+            for e in related_edges:
+                prompt += f"- {e.get('source')} --[{e.get('type')}]--> {e.get('target')}\n"
+            
+            if st.button("🧠 AI 해석 생성", key="interpret_graph"):
+                with st.spinner("LLM이 해석 중..."):
+                    interp = llm.chat([{"role": "user", "content": prompt}], kb_content=kb_content, max_tokens=200)
+                st.markdown(f"**'{selected_node}' 해석:**")
+                st.write(interp)
+        else:
+            st.info(f"'{selected_node}'와 연결된 edge가 없습니다.")
+    else:
+        st.info("👈 그래프에서 노드를 클릭하면 LLM이 해석을 제공합니다.")
 
 with col1:
     st.subheader("🌐 그래프 뷰")
@@ -79,6 +125,18 @@ with col1:
             }
         }
         """)
+        
+        # [ACADEMIC] Node selection for LLM reasoning (CM4AI pattern)
+        all_nodes = sorted(list(added_nodes))
+        if all_nodes:
+            selected = st.selectbox(
+                "🔍 노드 선택 (LLM 해석)",
+                ["-- 선택 --"] + all_nodes,
+                key="node_selector"
+            )
+            if selected != "-- 선택 --":
+                st.session_state["graph_selected_node"] = selected
+                st.rerun()
         
         # Streamlit에 표시
         pv_static(g)
