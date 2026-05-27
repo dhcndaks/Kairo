@@ -14,7 +14,7 @@ st.title("🧩 Knowledge Graph Visualization")
 # Academic reference badge (as proposed in Issue #3)
 st.caption(
     "📚 Powered by [Pyvis/VisJS](https://proceedings.scipy.org) (SciPy 2020) "
-    & "\u0026 [CM4AI KG+LLM](https://ceur-ws.org/Vol-3773/paper2.pdf) (CEUR WS 2025)"
+    + "\u0026 [CM4AI KG+LLM](https://ceur-ws.org/Vol-3773/paper2.pdf) (CEUR WS 2025)"
 )
 
 kb = KBManager()
@@ -76,7 +76,7 @@ with col1:
     
     if edges:
         # pyvis 그래프 생성
-        g = net.Network(height='600px', width='100%', bgcolor='#ffffff', font_color='#333333')
+        g = net.Network(height='600px', width='800px', bgcolor='#ffffff', font_color='#333333')
         
         # 노드 추가 (중복 방지)
         added_nodes = set()
